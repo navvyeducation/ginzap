@@ -3,6 +3,9 @@
 package ginzap
 
 import (
+	"bytes"
+	"io"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -50,7 +53,17 @@ func GinzapWithConfig(logger *zap.Logger, conf *Config) gin.HandlerFunc {
 		// some evil middlewares modify this values
 		path := c.Request.URL.Path
 		query := c.Request.URL.RawQuery
+
+		// capture a copy of the body before it's read
+		var buf bytes.Buffer
+		tee := io.TeeReader(c.Request.Body, &buf)
+		body, _ := ioutil.ReadAll(tee)
+		c.Request.Body = ioutil.NopCloser(&buf)
+
 		c.Next()
+
+		// set the body to the previously captured body
+		c.Request.Body = ioutil.NopCloser(bytes.NewBuffer(body))
 
 		if _, ok := skipPaths[path]; !ok {
 			end := time.Now()
